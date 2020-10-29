@@ -106,7 +106,7 @@ func EPMult(ep1, ep2 Interval) Interval {
 	return ret
 }
 
-// interval value
+// interval - abstract value
 type Bot struct{}
 type Range struct {
 	lbound Interval
