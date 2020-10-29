@@ -4,28 +4,26 @@ import (
 	"fmt"
 )
 
-////////////////////////////////////////
-// Endpoint used in interval notation //
-////////////////////////////////////////
-type Endpoint interface {
-	EPString() string
+/////////////////////
+// Interval Domain //
+/////////////////////
+type Interval interface {
+	String() string
 }
 
+// endpoint used in interval notation
 type Inf struct{}
 type MInf struct{}
 type Int struct {
 	v int
 }
 
-func (inf Inf) EPString() string   { return "+inf" }
-func (minf MInf) EPString() string { return "-inf" }
-func (i Int) EPString() string     { return fmt.Sprintf("%+d", i.v) }
+func (inf Inf) String() string   { return "+inf" }
+func (minf MInf) String() string { return "-inf" }
+func (i Int) String() string     { return fmt.Sprintf("%+d", i.v) }
 
-func EPTop() Endpoint      { return Inf{} }
-func EPBot() Endpoint      { return MInf{} }
-func EPVal(v int) Endpoint { return Int{v} }
-
-func EPOrder(ep1, ep2 Endpoint) bool {
+// order of endpoint
+func EPOrder(ep1, ep2 Interval) bool {
 	var ret bool
 	switch v1 := ep1.(type) {
 	case MInf:
@@ -50,106 +48,107 @@ func EPOrder(ep1, ep2 Endpoint) bool {
 	return ret
 }
 
-func EPMult(ep1, ep2 Endpoint) Endpoint {
-	var ret Endpoint
+func EPMult(ep1, ep2 Interval) Interval {
+	var ret Interval
 	switch v1 := ep1.(type) {
 	case MInf:
 		switch v2 := ep2.(type) {
 		case Inf:
-			ret = EPBot()
+			ret = MInf{}
 		case MInf:
-			ret = EPTop()
+			ret = Inf{}
 		case Int:
 			if v2.v < 0 {
-				ret = EPTop()
+				ret = Inf{}
 			} else if v2.v > 0 {
-				ret = EPBot()
+				ret = MInf{}
 			} else {
-				ret = EPVal(0)
+				ret = Int{0}
 			}
 		}
 	case Inf:
 		switch v2 := ep2.(type) {
 		case Inf:
-			ret = EPTop()
+			ret = Inf{}
 		case MInf:
-			ret = EPBot()
+			ret = MInf{}
 		case Int:
 			if v2.v < 0 {
-				ret = EPBot()
+				ret = MInf{}
 			} else if v2.v > 0 {
-				ret = EPTop()
+				ret = Inf{}
 			} else {
-				ret = EPVal(0)
+				ret = Int{0}
 			}
 		}
 	case Int:
 		switch v2 := ep2.(type) {
 		case Inf:
 			if v1.v < 0 {
-				ret = EPBot()
+				ret = MInf{}
 			} else if v1.v > 0 {
-				ret = EPTop()
+				ret = Inf{}
 			} else {
-				ret = EPVal(0)
+				ret = Int{0}
 			}
 		case MInf:
 			if v1.v < 0 {
-				ret = EPTop()
+				ret = Inf{}
 			} else if v1.v > 0 {
-				ret = EPBot()
+				ret = MInf{}
 			} else {
-				ret = EPVal(0)
+				ret = Int{0}
 			}
 		case Int:
-			ret = EPVal(v1.v * v2.v)
+			ret = Int{v1.v * v2.v}
 		}
 	}
 	return ret
 }
 
-/////////////////////
-// Interval Domain //
-/////////////////////
-type Interval interface {
-	InterString() string
-}
-
+// interval value
 type Bot struct{}
 type Range struct {
-	low  Endpoint
-	high Endpoint
+	lbound Interval
+	ubound Interval
 }
 
 // Abstract value to string
-func (b Bot) InterString() string { return "Bot" }
-func (r Range) InterString() string {
-	return fmt.Sprintf("[%s, %s]", r.low.EPString(), r.high.EPString())
+func (b Bot) String() string { return "Bot" }
+func (r Range) String() string {
+	return fmt.Sprintf("[%s, %s]", r.lbound.String(), r.ubound.String())
 }
 
-// abstraction: int -> Interval
+// abstraction from concrete value
 func InterBot() Interval { return Bot{} }
-func InterRange(low, high Endpoint) Interval {
-	return Range{low, high}
+func InterRange(lbound, ubound Interval) Interval {
+	switch lbound.(type) {
+	case Inf, MInf, Int:
+		switch ubound.(type) {
+		case Inf, MInf, Int:
+			return Range{lbound, ubound}
+		}
+	}
+	panic("InterRange: range define error (unreachable)")
 }
 func InterTop() Interval {
-	return Range{EPBot(), EPTop()}
+	return Range{MInf{}, Inf{}}
 }
 
-// order
+// order of interval
 func InterOrder(i1, i2 Interval) bool {
 	var ret bool
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = true
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = false
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			ret = EPOrder(i2_low, i1_low) && EPOrder(i1_high, i2_high)
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			ret = EPOrder(i2_lbound, i1_lbound) && EPOrder(i1_ubound, i2_ubound)
 		}
 	}
 	return ret
@@ -163,48 +162,48 @@ func InterJoin(i1, i2 Interval) Interval {
 	} else if InterOrder(i2, i1) {
 		ret = i1
 	} else {
-		i1_low, i1_high := i1.(Range).low, i1.(Range).high
-		i2_low, i2_high := i2.(Range).low, i2.(Range).high
-		var new_low, new_high Endpoint
-		if EPOrder(i1_low, i2_low) {
-			new_low = i1_low
+		i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+		i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+		var new_lbound, new_ubound Interval
+		if EPOrder(i1_lbound, i2_lbound) {
+			new_lbound = i1_lbound
 		} else {
-			new_low = i2_low
+			new_lbound = i2_lbound
 		}
-		if EPOrder(i1_high, i2_high) {
-			new_high = i2_high
+		if EPOrder(i1_ubound, i2_ubound) {
+			new_ubound = i2_ubound
 		} else {
-			new_high = i1_high
+			new_ubound = i1_ubound
 		}
-		ret = InterRange(new_low, new_high)
+		ret = InterRange(new_lbound, new_ubound)
 	}
 	return ret
 }
 
 func InterWiden(i1, i2 Interval) Interval {
 	var ret Interval
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = i2
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = i1
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			var new_low, new_high Endpoint
-			if EPOrder(i1_low, i2_low) {
-				new_low = i1_low
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			var new_lbound, new_ubound Interval
+			if EPOrder(i1_lbound, i2_lbound) {
+				new_lbound = i1_lbound
 			} else {
-				new_low = EPBot()
+				new_lbound = MInf{}
 			}
-			if EPOrder(i1_high, i2_high) {
-				new_high = EPTop()
+			if EPOrder(i1_ubound, i2_ubound) {
+				new_ubound = Inf{}
 			} else {
-				new_high = i1_high
+				new_ubound = i1_ubound
 			}
-			ret = InterRange(new_low, new_high)
+			ret = InterRange(new_lbound, new_ubound)
 		}
 	}
 	return ret
@@ -212,28 +211,28 @@ func InterWiden(i1, i2 Interval) Interval {
 
 func InterNarrow(i1, i2 Interval) Interval {
 	var ret Interval
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = InterBot()
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = InterBot()
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			var new_low, new_high Endpoint
-			if i1_low == EPBot() {
-				new_low = i2_low
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			var new_lbound, new_ubound Interval
+			if i1_lbound == (MInf{}) {
+				new_lbound = i2_lbound
 			} else {
-				new_low = i1_low
+				new_lbound = i1_lbound
 			}
-			if i1_high == EPTop() {
-				new_high = i2_high
+			if i1_ubound == (Inf{}) {
+				new_ubound = i2_ubound
 			} else {
-				new_high = i1_high
+				new_ubound = i1_ubound
 			}
-			ret = InterRange(new_low, new_high)
+			ret = InterRange(new_lbound, new_ubound)
 		}
 	}
 	return ret
@@ -242,32 +241,32 @@ func InterNarrow(i1, i2 Interval) Interval {
 // binary operation
 func InterPlus(i1, i2 Interval) Interval {
 	var ret Interval
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = InterBot()
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = InterBot()
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			var new_low, new_high Endpoint
-			if i1_low == EPBot() {
-				new_low = i1_low
-			} else if i2_low == EPBot() {
-				new_low = i2_low
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			var new_lbound, new_ubound Interval
+			if i1_lbound == (MInf{}) {
+				new_lbound = i1_lbound
+			} else if i2_lbound == (MInf{}) {
+				new_lbound = i2_lbound
 			} else {
-				new_low = EPVal(i1_low.(Int).v + i2_low.(Int).v)
+				new_lbound = Int{i1_lbound.(Int).v + i2_lbound.(Int).v}
 			}
-			if i1_high == EPTop() {
-				new_high = i1_high
-			} else if i2_high == EPTop() {
-				new_high = i2_high
+			if i1_ubound == (Inf{}) {
+				new_ubound = i1_ubound
+			} else if i2_ubound == (Inf{}) {
+				new_ubound = i2_ubound
 			} else {
-				new_high = EPVal(i1_high.(Int).v + i2_high.(Int).v)
+				new_ubound = Int{i1_ubound.(Int).v + i2_ubound.(Int).v}
 			}
-			ret = InterRange(new_low, new_high)
+			ret = InterRange(new_lbound, new_ubound)
 		}
 	}
 	return ret
@@ -275,32 +274,32 @@ func InterPlus(i1, i2 Interval) Interval {
 
 func InterMinus(i1, i2 Interval) Interval {
 	var ret Interval
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = InterBot()
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = InterBot()
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			var new_low, new_high Endpoint
-			if i1_low == EPBot() {
-				new_low = i1_low
-			} else if i2_high == EPTop() {
-				new_low = EPBot()
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			var new_lbound, new_ubound Interval
+			if i1_lbound == (MInf{}) {
+				new_lbound = i1_lbound
+			} else if i2_ubound == (Inf{}) {
+				new_lbound = MInf{}
 			} else {
-				new_low = EPVal(i1_low.(Int).v - i2_high.(Int).v)
+				new_lbound = Int{i1_lbound.(Int).v - i2_ubound.(Int).v}
 			}
-			if i1_high == EPTop() {
-				new_high = i1_high
-			} else if i2_low == EPBot() {
-				new_high = EPTop()
+			if i1_ubound == (Inf{}) {
+				new_ubound = i1_ubound
+			} else if i2_lbound == (MInf{}) {
+				new_ubound = Inf{}
 			} else {
-				new_high = EPVal(i1_high.(Int).v - i2_low.(Int).v)
+				new_ubound = Int{i1_ubound.(Int).v - i2_lbound.(Int).v}
 			}
-			ret = InterRange(new_low, new_high)
+			ret = InterRange(new_lbound, new_ubound)
 		}
 	}
 	return ret
@@ -308,34 +307,34 @@ func InterMinus(i1, i2 Interval) Interval {
 
 func InterMult(i1, i2 Interval) Interval {
 	var ret Interval
-	switch v1 := i1.(type) {
+	switch i1.(type) {
 	case Bot:
 		ret = InterBot()
 	case Range:
-		switch v2 := i2.(type) {
+		switch i2.(type) {
 		case Bot:
 			ret = InterBot()
 		case Range:
-			i1_low, i1_high := v1.low, v1.high
-			i2_low, i2_high := v2.low, v2.high
-			ep_list := [4]Endpoint{
-				EPMult(i1_low, i2_low),
-				EPMult(i1_low, i2_high),
-				EPMult(i1_high, i2_low),
-				EPMult(i1_high, i2_high),
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			ep_list := [4]Interval{
+				EPMult(i1_lbound, i2_lbound),
+				EPMult(i1_lbound, i2_ubound),
+				EPMult(i1_ubound, i2_lbound),
+				EPMult(i1_ubound, i2_ubound),
 			}
 
-			new_low := ep_list[0]
-			new_high := ep_list[0]
+			new_lbound := ep_list[0]
+			new_ubound := ep_list[0]
 			for _, ep := range ep_list {
-				if EPOrder(ep, new_low) {
-					new_low = ep
+				if EPOrder(ep, new_lbound) {
+					new_lbound = ep
 				}
-				if EPOrder(new_high, ep) {
-					new_high = ep
+				if EPOrder(new_ubound, ep) {
+					new_ubound = ep
 				}
 			}
-			ret = InterRange(new_low, new_high)
+			ret = InterRange(new_lbound, new_ubound)
 		}
 	}
 	return ret
