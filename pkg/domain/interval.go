@@ -14,13 +14,13 @@ type Interval interface {
 // endpoint used in interval notation
 type Inf struct{}
 type MInf struct{}
-type Int struct {
+type Endpoint struct {
 	v int
 }
 
-func (inf Inf) String() string   { return "+inf" }
-func (minf MInf) String() string { return "-inf" }
-func (i Int) String() string     { return fmt.Sprintf("%+d", i.v) }
+func (inf Inf) String() string    { return "+inf" }
+func (minf MInf) String() string  { return "-inf" }
+func (i Endpoint) String() string { return fmt.Sprintf("%+d", i.v) }
 
 // order of endpoint
 func EPOrder(ep1, ep2 Interval) bool {
@@ -28,18 +28,18 @@ func EPOrder(ep1, ep2 Interval) bool {
 	switch v1 := ep1.(type) {
 	case MInf:
 		ret = true
-	case Int:
+	case Endpoint:
 		switch v2 := ep2.(type) {
 		case MInf:
 			ret = false
-		case Int:
+		case Endpoint:
 			return v1.v <= v2.v
 		case Inf:
 			ret = true
 		}
 	case Inf:
 		switch ep2.(type) {
-		case MInf, Int:
+		case MInf, Endpoint:
 			ret = false
 		case Inf:
 			ret = true
@@ -57,13 +57,13 @@ func EPMult(ep1, ep2 Interval) Interval {
 			ret = MInf{}
 		case MInf:
 			ret = Inf{}
-		case Int:
+		case Endpoint:
 			if v2.v < 0 {
 				ret = Inf{}
 			} else if v2.v > 0 {
 				ret = MInf{}
 			} else {
-				ret = Int{0}
+				ret = Endpoint{0}
 			}
 		}
 	case Inf:
@@ -72,16 +72,16 @@ func EPMult(ep1, ep2 Interval) Interval {
 			ret = Inf{}
 		case MInf:
 			ret = MInf{}
-		case Int:
+		case Endpoint:
 			if v2.v < 0 {
 				ret = MInf{}
 			} else if v2.v > 0 {
 				ret = Inf{}
 			} else {
-				ret = Int{0}
+				ret = Endpoint{0}
 			}
 		}
-	case Int:
+	case Endpoint:
 		switch v2 := ep2.(type) {
 		case Inf:
 			if v1.v < 0 {
@@ -89,7 +89,7 @@ func EPMult(ep1, ep2 Interval) Interval {
 			} else if v1.v > 0 {
 				ret = Inf{}
 			} else {
-				ret = Int{0}
+				ret = Endpoint{0}
 			}
 		case MInf:
 			if v1.v < 0 {
@@ -97,10 +97,10 @@ func EPMult(ep1, ep2 Interval) Interval {
 			} else if v1.v > 0 {
 				ret = MInf{}
 			} else {
-				ret = Int{0}
+				ret = Endpoint{0}
 			}
-		case Int:
-			ret = Int{v1.v * v2.v}
+		case Endpoint:
+			ret = Endpoint{v1.v * v2.v}
 		}
 	}
 	return ret
@@ -123,9 +123,9 @@ func (r Range) String() string {
 func InterBot() Interval { return Bot{} }
 func InterRange(lbound, ubound Interval) Interval {
 	switch lbound.(type) {
-	case Inf, MInf, Int:
+	case Inf, MInf, Endpoint:
 		switch ubound.(type) {
-		case Inf, MInf, Int:
+		case Inf, MInf, Endpoint:
 			return Range{lbound, ubound}
 		}
 	}
@@ -257,14 +257,14 @@ func InterPlus(i1, i2 Interval) Interval {
 			} else if i2_lbound == (MInf{}) {
 				new_lbound = i2_lbound
 			} else {
-				new_lbound = Int{i1_lbound.(Int).v + i2_lbound.(Int).v}
+				new_lbound = Endpoint{i1_lbound.(Endpoint).v + i2_lbound.(Endpoint).v}
 			}
 			if i1_ubound == (Inf{}) {
 				new_ubound = i1_ubound
 			} else if i2_ubound == (Inf{}) {
 				new_ubound = i2_ubound
 			} else {
-				new_ubound = Int{i1_ubound.(Int).v + i2_ubound.(Int).v}
+				new_ubound = Endpoint{i1_ubound.(Endpoint).v + i2_ubound.(Endpoint).v}
 			}
 			ret = InterRange(new_lbound, new_ubound)
 		}
@@ -290,14 +290,14 @@ func InterMinus(i1, i2 Interval) Interval {
 			} else if i2_ubound == (Inf{}) {
 				new_lbound = MInf{}
 			} else {
-				new_lbound = Int{i1_lbound.(Int).v - i2_ubound.(Int).v}
+				new_lbound = Endpoint{i1_lbound.(Endpoint).v - i2_ubound.(Endpoint).v}
 			}
 			if i1_ubound == (Inf{}) {
 				new_ubound = i1_ubound
 			} else if i2_lbound == (MInf{}) {
 				new_ubound = Inf{}
 			} else {
-				new_ubound = Int{i1_ubound.(Int).v - i2_lbound.(Int).v}
+				new_ubound = Endpoint{i1_ubound.(Endpoint).v - i2_lbound.(Endpoint).v}
 			}
 			ret = InterRange(new_lbound, new_ubound)
 		}
