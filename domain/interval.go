@@ -49,3 +49,47 @@ func InterLeftRange(high int) Interval {
 func InterRightRange(low int) Interval {
 	return RightRange{low}
 }
+
+// order
+func InterOrder(i1, i2 Interval) bool {
+	var ret bool
+	switch v1 := i1.(type) {
+	case Bot:
+		ret = true
+	case Top:
+		ret = i2 == Top{}
+	case Range:
+		switch v2 := i2.(type) {
+		case Bot:
+			ret = false
+		case Top:
+			ret = true
+		case Range:
+			ret = (v1.low >= v2.low && v1.high <= v2.high)
+		case LeftRange:
+			ret = (v1.high <= v2.high)
+		case RightRange:
+			ret = (v1.low >= v2.low)
+		}
+	case LeftRange:
+		switch v2 := i2.(type) {
+		case Bot, Range, RightRange:
+			ret = false
+		case Top:
+			ret = true
+		case LeftRange:
+			ret = (v1.high <= v2.high)
+		}
+	case RightRange:
+		switch v2 := i2.(type) {
+		case Bot, Range, LeftRange:
+			ret = false
+		case Top:
+			ret = true
+		case RightRange:
+			ret = (v1.low >= v2.low)
+		}
+	}
+
+	return ret
+}
