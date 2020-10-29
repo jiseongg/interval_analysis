@@ -7,47 +7,72 @@ import (
 /////////////////////
 // Interval Domain //
 /////////////////////
+type Endpoint interface {
+	EPString() string
+}
+
+type Inf struct{}
+type MInf struct{}
+type Int struct {
+	v int
+}
+
+func (inf Inf) EPString() string   { return "+inf" }
+func (minf MInf) EPString() string { return "-inf" }
+func (i Int) EPString() string     { return fmt.Sprintf("%+d", i.v) }
+
+func EPTop() Endpoint      { return Inf{} }
+func EPBot() Endpoint      { return MInf{} }
+func EPVal(v int) Endpoint { return Int{v} }
+
+func EPOrder(ep1, ep2 Endpoint) bool {
+	var ret bool
+	switch v1 := ep1.(type) {
+	case MInf:
+		ret = true
+	case Int:
+		switch v2 := ep2.(type) {
+		case MInf:
+			ret = false
+		case Int:
+			return v1.v <= v2.v
+		case Inf:
+			ret = true
+		}
+	case Inf:
+		switch ep2.(type) {
+		case MInf, Int:
+			ret = false
+		case Inf:
+			ret = true
+		}
+	}
+	return ret
+}
+
 type Interval interface {
-	String() string
+	InterString() string
 }
 
 type Bot struct{}
-type Top struct{}
 type Range struct {
-	low  int
-	high int
-}
-type LeftRange struct {
-	high int
-}
-type RightRange struct {
-	low int
+	low  Endpoint
+	high Endpoint
 }
 
 // Abstract value to string
-func (b Bot) String() string { return "Bot" }
-func (t Top) String() string { return "[-inf, +inf]" }
-func (r Range) String() string {
-	return fmt.Sprintf("[%+d, %+d]", r.low, r.high)
-}
-func (lr LeftRange) String() string {
-	return fmt.Sprintf("[-inf, %+d]", lr.high)
-}
-func (rr RightRange) String() string {
-	return fmt.Sprintf("[%+d, +inf]", rr.low)
+func (b Bot) InterString() string { return "Bot" }
+func (r Range) InterString() string {
+	return fmt.Sprintf("[%s, %s]", r.low.EPString(), r.high.EPString())
 }
 
 // abstraction: int -> Interval
-func InterTop() Interval { return Top{} }
 func InterBot() Interval { return Bot{} }
-func InterRange(low, high int) Interval {
+func InterRange(low, high Endpoint) Interval {
 	return Range{low, high}
 }
-func InterLeftRange(high int) Interval {
-	return LeftRange{high}
-}
-func InterRightRange(low int) Interval {
-	return RightRange{low}
+func InterTop() Interval {
+	return Range{EPBot(), EPTop()}
 }
 
 // order
@@ -56,40 +81,41 @@ func InterOrder(i1, i2 Interval) bool {
 	switch v1 := i1.(type) {
 	case Bot:
 		ret = true
-	case Top:
-		ret = i2 == Top{}
 	case Range:
 		switch v2 := i2.(type) {
 		case Bot:
 			ret = false
-		case Top:
-			ret = true
 		case Range:
-			ret = (v1.low >= v2.low && v1.high <= v2.high)
-		case LeftRange:
-			ret = (v1.high <= v2.high)
-		case RightRange:
-			ret = (v1.low >= v2.low)
-		}
-	case LeftRange:
-		switch v2 := i2.(type) {
-		case Bot, Range, RightRange:
-			ret = false
-		case Top:
-			ret = true
-		case LeftRange:
-			ret = (v1.high <= v2.high)
-		}
-	case RightRange:
-		switch v2 := i2.(type) {
-		case Bot, Range, LeftRange:
-			ret = false
-		case Top:
-			ret = true
-		case RightRange:
-			ret = (v1.low >= v2.low)
+			i1_low, i1_high := v1.low, v1.high
+			i2_low, i2_high := v2.low, v2.high
+			ret = EPOrder(i2_low, i1_low) && EPOrder(i1_high, i2_high)
 		}
 	}
+	return ret
+}
 
+// set operation
+func InterJoin(i1, i2 Interval) Interval {
+	var ret Interval
+	if InterOrder(i1, i2) {
+		ret = i2
+	} else if InterOrder(i2, i1) {
+		ret = i1
+	} else {
+		i1_low, i1_high := i1.(Range).low, i1.(Range).high
+		i2_low, i2_high := i2.(Range).low, i2.(Range).high
+		var new_low, new_high Endpoint
+		if EPOrder(i1_low, i2_low) {
+			new_low = i1_low
+		} else {
+			new_low = i2_low
+		}
+		if EPOrder(i1_high, i2_high) {
+			new_high = i2_high
+		} else {
+			new_high = i1_high
+		}
+		ret = InterRange(new_low, new_high)
+	}
 	return ret
 }
