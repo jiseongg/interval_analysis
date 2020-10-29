@@ -119,3 +119,61 @@ func InterJoin(i1, i2 Interval) Interval {
 	}
 	return ret
 }
+
+func InterWiden(i1, i2 Interval) Interval {
+	var ret Interval
+	switch v1 := i1.(type) {
+	case Bot:
+		ret = i2
+	case Range:
+		switch v2 := i2.(type) {
+		case Bot:
+			ret = i1
+		case Range:
+			i1_low, i1_high := v1.low, v1.high
+			i2_low, i2_high := v2.low, v2.high
+			var new_low, new_high Endpoint
+			if EPOrder(i1_low, i2_low) {
+				new_low = i1_low
+			} else {
+				new_low = EPBot()
+			}
+			if EPOrder(i1_high, i2_high) {
+				new_high = EPTop()
+			} else {
+				new_high = i1_high
+			}
+			ret = InterRange(new_low, new_high)
+		}
+	}
+	return ret
+}
+
+func InterNarrow(i1, i2 Interval) Interval {
+	var ret Interval
+	switch v1 := i1.(type) {
+	case Bot:
+		ret = InterBot()
+	case Range:
+		switch v2 := i2.(type) {
+		case Bot:
+			ret = InterBot()
+		case Range:
+			i1_low, i1_high := v1.low, v1.high
+			i2_low, i2_high := v2.low, v2.high
+			var new_low, new_high Endpoint
+			if i1_low == EPBot() {
+				new_low = i2_low
+			} else {
+				new_low = i1_low
+			}
+			if i1_high == EPTop() {
+				new_high = i2_high
+			} else {
+				new_high = i1_high
+			}
+			ret = InterRange(new_low, new_high)
+		}
+	}
+	return ret
+}
