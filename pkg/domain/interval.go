@@ -15,15 +15,15 @@ type Interval interface {
 type Inf struct{}
 type MInf struct{}
 type Endpoint struct {
-	v int
+	epval int
 }
 
 func (inf Inf) String() string    { return "+inf" }
 func (minf MInf) String() string  { return "-inf" }
-func (i Endpoint) String() string { return fmt.Sprintf("%+d", i.v) }
+func (i Endpoint) String() string { return fmt.Sprintf("%+d", i.epval) }
 
 // order of endpoint
-func EPOrder(ep1, ep2 Interval) bool {
+func EPSLE(ep1, ep2 Interval) bool {
 	var ret bool
 	switch v1 := ep1.(type) {
 	case MInf:
@@ -33,7 +33,32 @@ func EPOrder(ep1, ep2 Interval) bool {
 		case MInf:
 			ret = false
 		case Endpoint:
-			return v1.v <= v2.v
+			return v1.epval <= v2.epval
+		case Inf:
+			ret = true
+		}
+	case Inf:
+		switch ep2.(type) {
+		case MInf, Endpoint:
+			ret = false
+		case Inf:
+			ret = true
+		}
+	}
+	return ret
+}
+
+func EPSLT(ep1, ep2 Interval) bool {
+	var ret bool
+	switch v1 := ep1.(type) {
+	case MInf:
+		ret = true
+	case Endpoint:
+		switch v2 := ep2.(type) {
+		case MInf:
+			ret = false
+		case Endpoint:
+			return v1.epval < v2.epval
 		case Inf:
 			ret = true
 		}
@@ -58,9 +83,9 @@ func EPMult(ep1, ep2 Interval) Interval {
 		case MInf:
 			ret = Inf{}
 		case Endpoint:
-			if v2.v < 0 {
+			if v2.epval < 0 {
 				ret = Inf{}
-			} else if v2.v > 0 {
+			} else if v2.epval > 0 {
 				ret = MInf{}
 			} else {
 				ret = Endpoint{0}
@@ -73,9 +98,9 @@ func EPMult(ep1, ep2 Interval) Interval {
 		case MInf:
 			ret = MInf{}
 		case Endpoint:
-			if v2.v < 0 {
+			if v2.epval < 0 {
 				ret = MInf{}
-			} else if v2.v > 0 {
+			} else if v2.epval > 0 {
 				ret = Inf{}
 			} else {
 				ret = Endpoint{0}
@@ -84,23 +109,23 @@ func EPMult(ep1, ep2 Interval) Interval {
 	case Endpoint:
 		switch v2 := ep2.(type) {
 		case Inf:
-			if v1.v < 0 {
+			if v1.epval < 0 {
 				ret = MInf{}
-			} else if v1.v > 0 {
+			} else if v1.epval > 0 {
 				ret = Inf{}
 			} else {
 				ret = Endpoint{0}
 			}
 		case MInf:
-			if v1.v < 0 {
+			if v1.epval < 0 {
 				ret = Inf{}
-			} else if v1.v > 0 {
+			} else if v1.epval > 0 {
 				ret = MInf{}
 			} else {
 				ret = Endpoint{0}
 			}
 		case Endpoint:
-			ret = Endpoint{v1.v * v2.v}
+			ret = Endpoint{v1.epval * v2.epval}
 		}
 	}
 	return ret
@@ -148,7 +173,7 @@ func InterOrder(i1, i2 Interval) bool {
 		case Range:
 			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
 			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
-			ret = EPOrder(i2_lbound, i1_lbound) && EPOrder(i1_ubound, i2_ubound)
+			ret = EPSLE(i2_lbound, i1_lbound) && EPSLE(i1_ubound, i2_ubound)
 		}
 	}
 	return ret
@@ -165,12 +190,12 @@ func InterJoin(i1, i2 Interval) Interval {
 		i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
 		i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
 		var new_lbound, new_ubound Interval
-		if EPOrder(i1_lbound, i2_lbound) {
+		if EPSLE(i1_lbound, i2_lbound) {
 			new_lbound = i1_lbound
 		} else {
 			new_lbound = i2_lbound
 		}
-		if EPOrder(i1_ubound, i2_ubound) {
+		if EPSLE(i1_ubound, i2_ubound) {
 			new_ubound = i2_ubound
 		} else {
 			new_ubound = i1_ubound
@@ -193,12 +218,12 @@ func InterWiden(i1, i2 Interval) Interval {
 			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
 			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
 			var new_lbound, new_ubound Interval
-			if EPOrder(i1_lbound, i2_lbound) {
-				new_lbound = i1_lbound
-			} else {
+			if EPSLT(i2_lbound, i1_lbound) {
 				new_lbound = MInf{}
+			} else {
+				new_lbound = i1_lbound
 			}
-			if EPOrder(i1_ubound, i2_ubound) {
+			if EPSLT(i1_ubound, i2_ubound) {
 				new_ubound = Inf{}
 			} else {
 				new_ubound = i1_ubound
@@ -257,14 +282,14 @@ func InterPlus(i1, i2 Interval) Interval {
 			} else if i2_lbound == (MInf{}) {
 				new_lbound = i2_lbound
 			} else {
-				new_lbound = Endpoint{i1_lbound.(Endpoint).v + i2_lbound.(Endpoint).v}
+				new_lbound = Endpoint{i1_lbound.(Endpoint).epval + i2_lbound.(Endpoint).epval}
 			}
 			if i1_ubound == (Inf{}) {
 				new_ubound = i1_ubound
 			} else if i2_ubound == (Inf{}) {
 				new_ubound = i2_ubound
 			} else {
-				new_ubound = Endpoint{i1_ubound.(Endpoint).v + i2_ubound.(Endpoint).v}
+				new_ubound = Endpoint{i1_ubound.(Endpoint).epval + i2_ubound.(Endpoint).epval}
 			}
 			ret = InterRange(new_lbound, new_ubound)
 		}
@@ -290,14 +315,14 @@ func InterMinus(i1, i2 Interval) Interval {
 			} else if i2_ubound == (Inf{}) {
 				new_lbound = MInf{}
 			} else {
-				new_lbound = Endpoint{i1_lbound.(Endpoint).v - i2_ubound.(Endpoint).v}
+				new_lbound = Endpoint{i1_lbound.(Endpoint).epval - i2_ubound.(Endpoint).epval}
 			}
 			if i1_ubound == (Inf{}) {
 				new_ubound = i1_ubound
 			} else if i2_lbound == (MInf{}) {
 				new_ubound = Inf{}
 			} else {
-				new_ubound = Endpoint{i1_ubound.(Endpoint).v - i2_lbound.(Endpoint).v}
+				new_ubound = Endpoint{i1_ubound.(Endpoint).epval - i2_lbound.(Endpoint).epval}
 			}
 			ret = InterRange(new_lbound, new_ubound)
 		}
@@ -327,14 +352,38 @@ func InterMult(i1, i2 Interval) Interval {
 			new_lbound := ep_list[0]
 			new_ubound := ep_list[0]
 			for _, ep := range ep_list {
-				if EPOrder(ep, new_lbound) {
+				if EPSLE(ep, new_lbound) {
 					new_lbound = ep
 				}
-				if EPOrder(new_ubound, ep) {
+				if EPSLE(new_ubound, ep) {
 					new_ubound = ep
 				}
 			}
 			ret = InterRange(new_lbound, new_ubound)
+		}
+	}
+	return ret
+}
+
+func InterSLT(i1, i2 Interval) Interval {
+	var ret Interval
+	switch i1.(type) {
+	case Bot:
+		ret = InterBot()
+	case Range:
+		switch i2.(type) {
+		case Bot:
+			ret = InterBot()
+		case Range:
+			i1_lbound, i1_ubound := i1.(Range).lbound, i1.(Range).ubound
+			i2_lbound, i2_ubound := i2.(Range).lbound, i2.(Range).ubound
+			if EPSLT(i1_ubound, i2_lbound) {
+				ret = InterRange(Endpoint{1}, Endpoint{1})
+			} else if EPSLT(i2_ubound, i1_lbound) {
+				ret = InterRange(Endpoint{0}, Endpoint{0})
+			} else {
+				ret = InterTop()
+			}
 		}
 	}
 	return ret
