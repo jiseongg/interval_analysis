@@ -20,7 +20,7 @@ func InputOf(here Node, cfg Cfg, tbl Table) State {
 	}
 }
 
-func AnalyzeStep(cfg Cfg, tbl *Table, widen bool) {
+func AnalyzeWiden(cfg Cfg, tbl *Table) {
 	worklist := NewWorklist()
 	worklist.AddSet(cfg.blocks)
 	for !worklist.IsEmpty() {
@@ -29,10 +29,28 @@ func AnalyzeStep(cfg Cfg, tbl *Table, widen bool) {
 		state.TransferBlock(here.Insts)
 		old_state := tbl.Find(here)
 
-		if widen {
+		if !StateOrder(state, old_state) {
+			if StateOrder(state, old_state) {
+				continue
+			}
 			tbl.Bind(here, StateWiden(old_state, state))
 			worklist.AddSet(cfg.Succ(here))
-		} else {
+		}
+	}
+}
+
+func AnalyzeNarrow(cfg Cfg, tbl *Table) {
+	worklist := NewWorklist()
+	worklist.AddSet(cfg.blocks)
+	for !worklist.IsEmpty() {
+		here := worklist.Choose()
+		state := InputOf(here, cfg, *tbl)
+		state.TransferBlock(here.Insts)
+		old_state := tbl.Find(here)
+		if StateOrder(state, old_state) {
+			if StateOrder(state, old_state) {
+				continue
+			}
 			tbl.Bind(here, StateNarrow(old_state, state))
 			worklist.AddSet(cfg.Succ(here))
 		}
@@ -42,8 +60,8 @@ func AnalyzeStep(cfg Cfg, tbl *Table, widen bool) {
 func Analyze(cfg Cfg) Table {
 	tbl := NewTable()
 
-	AnalyzeStep(cfg, &tbl, true)  // widening
-	AnalyzeStep(cfg, &tbl, false) // narrowing
+	AnalyzeWiden(cfg, &tbl)
+	AnalyzeNarrow(cfg, &tbl)
 
 	return tbl
 }
